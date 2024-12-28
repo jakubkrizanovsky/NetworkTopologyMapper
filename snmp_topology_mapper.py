@@ -1,52 +1,76 @@
-from time import sleep
-from scapy.all import *
-from scapy.layers.inet import IP, UDP
-from scapy.layers.snmp import *
-import threading
+import asyncio
+from pysnmp.hlapi.v3arch.asyncio import *
+
+from topology_node import TopologyNode
+
+
 
 class SNMPTopologyMapper:
 
-    def __init__(self, iface, server_address):
-        self.iface = iface
-        self.server_address = server_address
+    def __init__(self, start_address:str):
+        self.searched_ips:list = []
+        self.waiting_ips:list = [start_address]
+        self.nodes:list = []
 
-    def test(self):
-        t1 = threading.Thread(target=self.listen_snmp)
-        t2 = threading.Thread(target=self.send_snmp_request)
+    async def map(self):
+        snmpEngine = SnmpEngine()
+        while len(self.waiting_ips) > 0:
+            await self.search(snmpEngine, self.waiting_ips.pop(0))
 
-        t1.start()
-        sleep(1)
-        t2.start()
+    async def search(self, snmpEngine:SnmpEngine, ipAddress:str):
+        print(f"Searching: {ipAddress}")
+
+        self.searched_ips.append(ipAddress)
+
+        #node = TopologyNode()
+
+        print(await self.get_display_name(snmpEngine, ipAddress))
         
-        t1.join()
-        t2.join()
 
-
-    def listen_snmp(self):
-        print("Listening...")
-        sniff(prn=self.process_snmp_packet, iface=self.iface, filter=f"udp and port 161", count=2)
-
-
-    def send_snmp_request(self):
-        snmp_request = (
-            IP(dst=self.server_address) /  # IP layer
-            UDP(sport=161, dport=161) /  # UDP layer with SNMP default port 161
-            SNMP(
-                community="psipub",
-                PDU=SNMPget(
-                    varbindlist=[
-                        SNMPvarbind(oid=ASN1_OID("1.3.6.1.2.1.1.5.0"))  # OID for ipRouteTable
-                    ]
-                )
-            )
+        print("Neighbors:")
+        route_items = walkCmd(
+                snmpEngine,
+                CommunityData("psipub"),
+                await UdpTransportTarget.create((ipAddress, 161)),
+                ContextData(),
+                ObjectType(ObjectIdentity("1.3.6.1.2.1.4.21.1.1")), #ipRouteDest
+                lexicographicMode=False
         )
 
-        # Send the SNMP packet
-        send(snmp_request)
+        async for item in route_items:
+            errorIndication, errorStatus, errorIndex, varBindTable = item
+            if errorIndication:
+                print(errorIndication)
+                break
+            elif errorStatus:
+                print(
+                    f"{errorStatus.prettyPrint()} at {item[int(errorIndex) - 1][0] if errorIndex else '?'}"
+                )
+            else:
+                ip = varBindTable[0][1].prettyPrint()
+                print(ip)
+
+                if not ip in self.searched_ips and not ip in self.waiting_ips:
+                    self.waiting_ips.append(ip)
+
+    async def get_display_name(self, snmpEngine:SnmpEngine, ipAddress:str) -> str:
+        errorIndication, errorStatus, errorIndex, varBindTable = await getCmd(
+                snmpEngine,
+                CommunityData("psipub"),
+                await UdpTransportTarget.create((ipAddress, 161)),
+                ContextData(),
+                ObjectType(ObjectIdentity("1.3.6.1.2.1.1.5.0")), #sysName
+                lexicographicMode=False
+        )
+
+        if not errorIndication:
+            return varBindTable[0][1].prettyPrint()
+        else:
+            return None
 
 
-    def process_snmp_packet(self, packet):
-        if packet.haslayer(SNMP):
-            print("SNMP Response Received:")
-            packet.show()
-            packet[SNMP].show()
+if __name__ == "__main__":
+    snmp_topology_mapper:SNMPTopologyMapper = SNMPTopologyMapper("10.0.1.1")
+    asyncio.run(
+        snmp_topology_mapper.map()
+    )
