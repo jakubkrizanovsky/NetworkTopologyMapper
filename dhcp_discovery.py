@@ -4,7 +4,7 @@ import threading
 
 class DHCPDiscovery:
 
-    def __init__(self, iface:str):
+    def __init__(self, iface):
         self.iface = iface
         self.server_address = None
 
@@ -20,11 +20,13 @@ class DHCPDiscovery:
         t1.join()
         t2.join()
 
+        return self.server_address
+
 
     def listen_dhcp(self):
         print("Listening...")
         # Make sure it is DHCP with the filter options
-        sniff(prn=self.check_dhcp_packet, iface=self.iface, filter="port 68 and port 67", count=2)
+        sniff(prn=self.process_dhcp_packet, iface=self.iface, filter="port 68 and port 67", count=2)
 
 
     def send_dhcp_discover(self):
@@ -45,7 +47,7 @@ class DHCPDiscovery:
         sendp(packet, iface=self.iface, verbose=False)
 
 
-    def check_dhcp_packet(self, packet):
+    def process_dhcp_packet(self, packet):
         print("Receved packet")
 
         bootp_operation = packet[BOOTP].op
