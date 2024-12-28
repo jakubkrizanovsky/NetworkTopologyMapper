@@ -3,21 +3,21 @@ from scapy.all import *
 import threading
 
 iface = "eth0"
+server_address = None
 
 def mac_to_bytes(mac_addr: str) -> bytes:
     """ Converts a MAC address string to bytes.
     """
     return int(mac_addr.replace(":", ""), 16).to_bytes(6, "big")
 
-def print_packet(packet):
-    print("Receved packet:")
-    packet.show()
+def check_dhcp_packet(packet):
+    print("Receved packet")
 
-    # initialize these variables to None at first
-    target_mac, requested_ip, hostname, vendor_id = [None] * 4
-    # get the MAC address of the requester
-    if packet.haslayer(Ether):
-        target_mac = packet.getlayer(Ether).src
+    bootp_operation = packet[BOOTP].op
+    # skip everything except bootreply operation
+    if(bootp_operation != 2):
+        return
+
     # get the DHCP options
     dhcp_options = packet[DHCP].options
     for item in dhcp_options:
@@ -25,28 +25,20 @@ def print_packet(packet):
             label, value = item
         except ValueError:
             continue
-        if label == 'requested_addr':
-            # get the requested IP
-            requested_ip = value
-        elif label == 'hostname':
-            # get the hostname of the device
-            hostname = value.decode()
-        elif label == 'vendor_class_id':
-            # get the vendor ID
-            vendor_id = value.decode()
-    #if target_mac and vendor_id and hostname and requested_ip:
-    # if all variables are not None, print the device details
-    time_now = time.strftime("[%Y-%m-%d - %H:%M:%S]")
-    print(f"{time_now} : {target_mac}  -  {hostname} / {vendor_id} requested {requested_ip}")
+        if label == "server_id":
+            server_address = value
+    
+    print(f"Server address: {server_address}")
 
 
 def listen_dhcp():
-    print("listening")
+    print("Listening...")
     # Make sure it is DHCP with the filter options
-    sniff(prn=print_packet, iface="eth0", filter="port 68 and port 67", count=2)
+    sniff(prn=check_dhcp_packet, iface=iface, filter="port 68 and port 67", count=2)
 
 def discover_dhcp():
-    print("sending discover")
+    
+    print("Sending DHCP discover...")
     fam,mac = get_if_raw_hwaddr(iface)
 
     packet = (
@@ -59,16 +51,15 @@ def discover_dhcp():
         ) /
         DHCP(options=[("message-type", "discover"), "end"])
     )
-    sendp(packet, iface="eth0", verbose=False)
+    sendp(packet, iface=iface, verbose=False)
 
 
 if __name__ == "__main__":
     t1 = threading.Thread(target=listen_dhcp)
     t2 = threading.Thread(target=discover_dhcp)
+
     t1.start()
-
     sleep(1)
-
     t2.start()
     
     t1.join()
