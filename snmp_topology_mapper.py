@@ -1,5 +1,7 @@
 from time import sleep
 from scapy.all import *
+from scapy.layers.inet import IP, UDP
+from scapy.layers.snmp import *
 import threading
 
 class SNMPTopologyMapper:
@@ -30,10 +32,10 @@ class SNMPTopologyMapper:
             IP(dst=self.server_address) /  # IP layer
             UDP(sport=161, dport=161) /  # UDP layer with SNMP default port 161
             SNMP(
-                community="public",
+                community="psipub",
                 PDU=SNMPget(
                     varbindlist=[
-                        SNMPvarbind(oid=ASN1_OID("1.3.6.1.2.1.4.21"))  # OID for ipRouteTable
+                        SNMPvarbind(oid=ASN1_OID("1.3.6.1.2.1.1.5.0"))  # OID for ipRouteTable
                     ]
                 )
             )
