@@ -2,18 +2,7 @@ from time import sleep
 from scapy.all import *
 import threading
 
-#response = sr1(IP(src='0.0.0.0', dst='255.255.255.255') / DHCP(options=[('message-type','discover')]))
-
-#cliMAC = '4e:11:9f:97:73:f2'
-
-# discover = Ether(dst='ff:ff:ff:ff:ff:ff', src=cliMAC, type=0x0800) / IP(src='0.0.0.0', dst='255.255.255.255') / UDP(dport=67,sport=68) / BOOTP(op=1, chaddr=cliMACchaddr) / DHCP(options=[('message-type','discover'), ('end')])
-
-# response = sr1(discover)
-# response.show()
-
-#response = sr1(IP(dst="8.8.4.4", ttl=1) / ICMP())
- 
-#response.show()
+iface = "eth0"
 
 def mac_to_bytes(mac_addr: str) -> bytes:
     """ Converts a MAC address string to bytes.
@@ -54,17 +43,18 @@ def print_packet(packet):
 def listen_dhcp():
     print("listening")
     # Make sure it is DHCP with the filter options
-    sniff(prn=print_packet, iface="eth0", filter="port 68 and port 67")
+    sniff(prn=print_packet, iface="eth0", filter="port 68 and port 67", count=2)
 
 def discover_dhcp():
     print("sending discover")
-    client_mac = "4e:11:9f:97:73:f2"
+    fam,mac = get_if_raw_hwaddr(iface)
+
     packet = (
         Ether(dst="ff:ff:ff:ff:ff:ff") /
         IP(src="0.0.0.0", dst="255.255.255.255") /
         UDP(sport=68, dport=67) /
         BOOTP(
-            chaddr=mac_to_bytes(client_mac),
+            chaddr=mac,
             xid=random.randint(1, 2**32-1),
         ) /
         DHCP(options=[("message-type", "discover"), "end"])
