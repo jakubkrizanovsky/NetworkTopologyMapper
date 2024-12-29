@@ -7,18 +7,21 @@ class TopologyVisualizer:
         self.net = Network()
 
     def visualize(self, nodes:list, nodes_by_ip:dict, filename:str):
+        print("Visualizing network topology...")
+
         node:TopologyNode
         for node in nodes:
             if node.sys_name is not None:
                 self.net.add_node(node.node_id, node.sys_name)
             else:
-                self.net.add_node(node.node_id)
+                self.net.add_node(node.node_id, "Unknown")
 
         for node in nodes:
             for neighbor_ip in node.neighbors:
                 neighbor = nodes_by_ip[neighbor_ip]
                 self.net.add_edge(node.node_id, neighbor.node_id)
 
+        print("Network topology output in file:")
         self.net.show(filename, notebook=False)
 
 

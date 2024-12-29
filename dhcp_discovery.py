@@ -13,6 +13,7 @@ class DHCPDiscovery:
         t1 = threading.Thread(target=self.listen_dhcp)
         t2 = threading.Thread(target=self.send_dhcp_discover)
 
+        print("Starting DHCP discovery...")
         t1.start()
         sleep(1)
         t2.start()
@@ -20,18 +21,22 @@ class DHCPDiscovery:
         t1.join()
         t2.join()
 
+        if self.server_address is not None:
+            print("DHCP discovery complete")
+        else:
+            print("Could not discover DHCP server")
+
         return self.server_address
 
 
     def listen_dhcp(self):
-        print("Listening...")
-        # Make sure it is DHCP with the filter options
-        sniff(prn=self.process_dhcp_packet, iface=self.iface, filter="port 68 and port 67", count=2)
+        print("Listening for DHCP packets...")
+        sniff(prn=self.process_dhcp_packet, iface=self.iface, filter="port 68 and port 67", count=2, timeout=5)
 
 
     def send_dhcp_discover(self):
         
-        print("Sending DHCP discover packet...")
+        # get interface MAC address
         fam,mac = get_if_raw_hwaddr(self.iface)
 
         packet = (
@@ -44,12 +49,12 @@ class DHCPDiscovery:
             ) /
             DHCP(options=[("message-type", "discover"), "end"])
         )
+
+        print("Sending DHCP discover packet...")
         sendp(packet, iface=self.iface, verbose=False)
 
 
     def process_dhcp_packet(self, packet):
-        print("Receved packet")
-
         bootp_operation = packet[BOOTP].op
         # skip everything except bootreply operation
         if(bootp_operation != 2):
@@ -65,16 +70,8 @@ class DHCPDiscovery:
             if label == "server_id":
                 self.server_address = value
         
-        print(f"Server address: {self.server_address}")
+        print(f"DHCP Server address: {self.server_address}")
 
 
     def mac_to_bytes(mac_addr: str) -> bytes:
-        """ Converts a MAC address string to bytes.
-        """
         return int(mac_addr.replace(":", ""), 16).to_bytes(6, "big")
-
-
-if __name__ == "__main__":
-    dhcp_discovery = DHCPDiscovery("eth0")
-    dhcp_discovery.discover_dhcp()
-    print(dhcp_discovery.server_address)

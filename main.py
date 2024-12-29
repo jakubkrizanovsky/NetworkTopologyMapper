@@ -7,13 +7,18 @@ iface = "eth0"
 filename = "topology.html"
 
 async def main():
+    # discover DHCP server address
     dhcp_discovery = DHCPDiscovery(iface)
     server_address = dhcp_discovery.discover_dhcp()
-    print(server_address)
+    # stop if unable to discover DHCP server
+    if server_address is None:
+        return
 
+    # map network topology using SNMP
     snmp_topology_mapper = SNMPTopologyMapper(server_address)
     (nodes, nodes_by_ip) = await snmp_topology_mapper.map()
 
+    # visualize network topology
     topology_visualizer = TopologyVisualizer()
     topology_visualizer.visualize(nodes, nodes_by_ip, filename)
     

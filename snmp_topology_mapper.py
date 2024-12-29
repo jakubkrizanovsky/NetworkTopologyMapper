@@ -13,15 +13,20 @@ class SNMPTopologyMapper:
         self.nodes:list = []
         self.nodes_by_ip:dict = {}
 
+
     async def map(self) -> tuple:
+        print("Mapping network topology...")
+
         while len(self.waiting_ips) > 0:
             await self.search(self.waiting_ips.pop(0))
-            print(f"Waiting IPs: {self.waiting_ips}")
+
+        print("Network topology mapping complete")
         
         return self.nodes, self.nodes_by_ip
 
+
     async def search(self, searched_ip:str):
-        print(f"Searching: {searched_ip}")
+        print(f"Searching node with IP: {searched_ip}")
 
         node = TopologyNode([searched_ip])
         self.nodes.append(node)
@@ -33,11 +38,11 @@ class SNMPTopologyMapper:
             return
         
         node.sys_name = sys_name
-        print(f"Sys name: {sys_name}")
+        print(f"\tSys name: {node.sys_name}")
 
         ip_addresses = await self.get_ip_addresses(searched_ip)
         node.ip_addresses = ip_addresses
-        print(f"IP adresses: {ip_addresses}")
+        print(f"\tIP adresses: {node.ip_addresses}")
 
         for ip_address in ip_addresses:
             self.nodes_by_ip[ip_address] = node
@@ -45,14 +50,12 @@ class SNMPTopologyMapper:
         self.searched_ips += ip_addresses
 
         neighbors = await self.get_neighbors(searched_ip)
-        print(f"Neighbors: {neighbors}")
-
         for neighbor_ip in neighbors:
             if not neighbor_ip in node.ip_addresses and not neighbor_ip in node.neighbors:
                 node.neighbors.append(neighbor_ip)
             if not neighbor_ip in self.searched_ips and not neighbor_ip in self.waiting_ips:
                 self.waiting_ips.append(neighbor_ip)
-
+        print(f"\tNeighbors: {node.neighbors}")
         
 
     async def get_sys_name(self, searched_ip:str) -> str:
