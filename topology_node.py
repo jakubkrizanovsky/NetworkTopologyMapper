@@ -1,7 +1,11 @@
-from dataclasses import dataclass
-
-@dataclass
 class TopologyNode:
-    mac_address:str
-    ip_addresses:list
-    neighbors:list
+
+    id_counter = 0
+
+    def __init__(self, ip_address:str):
+        self.node_id = TopologyNode.id_counter
+        TopologyNode.id_counter += 1
+
+        self.sys_name = None
+        self.ip_addresses = [ip_address]
+        self.neighbors = []

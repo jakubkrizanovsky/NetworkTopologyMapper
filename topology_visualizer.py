@@ -1,9 +1,31 @@
 from pyvis.network import Network
 
-net = Network(height="750px", width="100%", bgcolor="#222222", font_color="white")
+from topology_node import TopologyNode
 
-net.add_node(0, label='a')
-net.add_node(1, label='b')
-net.add_edge(0, 1)
+class TopologyVisualizer:
+    def __init__(self):
+        self.net = Network()
 
-net.show("test.html", notebook=False)
+    def visualize(self, nodes:list, filename:str):
+        node:TopologyNode
+        for node in nodes:
+            if node.sys_name is not None:
+                self.net.add_node(node.node_id, node.sys_name)
+            else:
+                self.net.add_node(node.node_id)
+
+        for node in nodes:
+            for neighbor_ip in node.neighbors:
+                neighbor = self.find_node_by_ip(nodes, neighbor_ip)
+                self.net.add_edge(node.node_id, neighbor.node_id)
+
+        self.net.show(filename, notebook=False)
+
+    def find_node_by_ip(self, nodes:list, ip_address:str) -> TopologyNode:
+        node:TopologyNode
+        for node in nodes:
+            if ip_address in node.ip_addresses:
+                return node
+
+
+
