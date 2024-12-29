@@ -4,63 +4,62 @@ from pysnmp.hlapi.v3arch.asyncio import *
 from topology_node import TopologyNode
 
 
-
 class SNMPTopologyMapper:
 
     def __init__(self, start_address:str):
+        self.snmp_engine = SnmpEngine()
         self.searched_ips:list = []
         self.waiting_ips:list = [start_address]
         self.nodes:list = []
-        self.nodes_by_name:dict = {}
+        self.nodes_by_ip:dict = {}
 
-    async def map(self) -> list:
-        snmpEngine = SnmpEngine()
+    async def map(self) -> tuple:
         while len(self.waiting_ips) > 0:
-            await self.search(snmpEngine, self.waiting_ips.pop(0))
-            print(self.waiting_ips)
+            await self.search(self.waiting_ips.pop(0))
+            print(f"Waiting IPs: {self.waiting_ips}")
         
-        return self.nodes
+        return self.nodes, self.nodes_by_ip
 
-    async def search(self, snmpEngine:SnmpEngine, ipAddress:str):
-        print(f"Searching: {ipAddress}")
+    async def search(self, searched_ip:str):
+        print(f"Searching: {searched_ip}")
 
-        self.searched_ips.append(ipAddress)
-
-        sys_name = await self.get_sys_name(snmpEngine, ipAddress)
-        if sys_name is None:
-            node = TopologyNode(ipAddress)
-            self.nodes.append(node)
-            return
-        
-        print(sys_name)
-        node = self.nodes_by_name.get(sys_name)
-        if node is not None:
-            node.ip_addresses.append(ipAddress)
-            print("Already searched, skipping")
-            return
-        
-        node = TopologyNode(ipAddress)
+        node = TopologyNode([searched_ip])
         self.nodes.append(node)
-        self.nodes_by_name[sys_name] = node
+
+        # try get sysname from node using snmp
+        sys_name = await self.get_sys_name(searched_ip)
+        if sys_name is None: # cannot reach node via snmp - stop asking
+            self.nodes_by_ip[searched_ip] = node
+            return
+        
         node.sys_name = sys_name
+        print(f"Sys name: {sys_name}")
 
-        print("Neighbors:")
+        ip_addresses = await self.get_ip_addresses(searched_ip)
+        node.ip_addresses = ip_addresses
+        print(f"IP adresses: {ip_addresses}")
 
-        neighbors = await self.get_neighbors(snmpEngine, ipAddress)
+        for ip_address in ip_addresses:
+            self.nodes_by_ip[ip_address] = node
+
+        self.searched_ips += ip_addresses
+
+        neighbors = await self.get_neighbors(searched_ip)
+        print(f"Neighbors: {neighbors}")
 
         for neighbor_ip in neighbors:
-            print(neighbor_ip)
-            node.neighbors.append(neighbor_ip)
+            if not neighbor_ip in node.ip_addresses and not neighbor_ip in node.neighbors:
+                node.neighbors.append(neighbor_ip)
             if not neighbor_ip in self.searched_ips and not neighbor_ip in self.waiting_ips:
                 self.waiting_ips.append(neighbor_ip)
 
         
 
-    async def get_sys_name(self, snmpEngine:SnmpEngine, ipAddress:str) -> str:
+    async def get_sys_name(self, searched_ip:str) -> str:
         errorIndication, errorStatus, errorIndex, varBindTable = await getCmd(
-                snmpEngine,
+                self.snmp_engine,
                 CommunityData("psipub"),
-                await UdpTransportTarget.create((ipAddress, 161)),
+                await UdpTransportTarget.create((searched_ip, 161)),
                 ContextData(),
                 ObjectType(ObjectIdentity("1.3.6.1.2.1.1.5.0")), #sysName
                 lexicographicMode=False
@@ -72,14 +71,42 @@ class SNMPTopologyMapper:
             print(errorIndication)
             return None
         
+
+    async def get_ip_addresses(self, searched_ip:str) -> list:
+        addresses = []
+
+        items = walkCmd(
+                self.snmp_engine,
+                CommunityData("psipub"),
+                await UdpTransportTarget.create((searched_ip, 161)),
+                ContextData(),
+                ObjectType(ObjectIdentity("1.3.6.1.2.1.4.20.1.1")), #ipAdEntAddr
+                lexicographicMode=False
+        )
+
+        async for item in items:
+            errorIndication, errorStatus, errorIndex, varBindTable = item
+            if errorIndication:
+                print(errorIndication)
+                break
+            elif errorStatus:
+                print(
+                    f"{errorStatus.prettyPrint()} at {item[int(errorIndex) - 1][0] if errorIndex else '?'}"
+                )
+            else:
+                ip = varBindTable[0][1].prettyPrint()
+                addresses.append(ip)
+
+        return addresses
+        
     
-    async def get_neighbors(self, snmpEngine:SnmpEngine, ipAddress:str) -> list:
+    async def get_neighbors(self, searched_ip:str) -> list:
         neighbors = []
 
         items = walkCmd(
-                snmpEngine,
+                self.snmp_engine,
                 CommunityData("psipub"),
-                await UdpTransportTarget.create((ipAddress, 161)),
+                await UdpTransportTarget.create((searched_ip, 161)),
                 ContextData(),
                 ObjectType(ObjectIdentity("1.3.6.1.2.1.4.21.1.7")), #ipRouteNextHop
                 lexicographicMode=False
@@ -99,10 +126,3 @@ class SNMPTopologyMapper:
                 neighbors.append(ip)
 
         return neighbors
-
-
-if __name__ == "__main__":
-    snmp_topology_mapper:SNMPTopologyMapper = SNMPTopologyMapper("10.0.1.1")
-    asyncio.run(
-        snmp_topology_mapper.map()
-    )

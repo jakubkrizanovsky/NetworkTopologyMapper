@@ -12,10 +12,10 @@ async def main():
     print(server_address)
 
     snmp_topology_mapper = SNMPTopologyMapper(server_address)
-    nodes = await snmp_topology_mapper.map()
+    (nodes, nodes_by_ip) = await snmp_topology_mapper.map()
 
     topology_visualizer = TopologyVisualizer()
-    topology_visualizer.visualize(nodes, filename)
+    topology_visualizer.visualize(nodes, nodes_by_ip, filename)
     
 
 if __name__ == "__main__":

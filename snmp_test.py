@@ -38,7 +38,7 @@ class SNMPTopologyMapper:
                     f"{errorStatus.prettyPrint()} at {item[int(errorIndex) - 1][0] if errorIndex else '?'}"
                 )
             else:
-                print(varBindTable[0][0])
+                #print(varBindTable[0][0])
                 print(varBindTable[0][1].prettyPrint())
 
         return neighbors
